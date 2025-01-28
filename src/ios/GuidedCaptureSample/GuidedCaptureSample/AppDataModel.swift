@@ -1,5 +1,5 @@
 /*
-See the LICENSE.txt file for this sample's licensing information.
+See the LICENSE.txt file for this sample’s licensing information.
 
 Abstract:
 A data model for maintaining the app state, including the underlying object capture state as well as any extra app state
@@ -9,7 +9,6 @@ A data model for maintaining the app state, including the underlying object capt
 import RealityKit
 import SwiftUI
 import os
-import Foundation
 
 private let logger = Logger(subsystem: GuidedCaptureSampleApp.subsystem,
                             category: "AppDataModel")
@@ -47,7 +46,6 @@ class AppDataModel: Identifiable {
         case notSet
         case ready
         case capturing
-        case autoCapturing
         case prepareToReconstruct
         case reconstructing
         case viewing
@@ -94,37 +92,6 @@ class AppDataModel: Identifiable {
     // Shows whether the tutorial has played once during a session.
     var tutorialPlayedOnce = false
 
-    enum CaptureStartMethod {
-        case manual
-        case automatic
-        case robotTriggered
-    }
-    
-    // Make these nonisolated so they can be accessed from any context
-    nonisolated let autoCaptureTimeInterval: TimeInterval = 180 // 3 minutes total capture time
-    
-    private(set) var captureStartMethod: CaptureStartMethod = .manual
-    private var autoCaptureTimer: Timer?
-    
-    // Add a computed property for orbit timing
-    nonisolated var timePerOrbit: TimeInterval {
-        autoCaptureTimeInterval / 3.0
-    }
-
-    // Add networking properties
-    private var robotConnection: URLSessionWebSocketTask?
-    private let robotIP = "192.168.10.10" // Match your robot's IP
-    private let robotPort = 8080 // Use appropriate port
-    
-    // Add robot state tracking
-    enum RobotState {
-        case disconnected
-        case connected
-        case moving
-        case completed
-    }
-    private(set) var robotState: RobotState = .disconnected
-
     // Postpone creating ObjectCaptureSession and PhotogrammetrySession until necessary.
     private init() {
         state = .ready
@@ -132,11 +99,6 @@ class AppDataModel: Identifiable {
                                                selector: #selector(handleAppTermination(notification:)),
                                                name: UIApplication.willTerminateNotification,
                                                object: nil)
-        
-        // Start auto capture if needed
-        if captureStartMethod != .manual {
-            startAutoCapture(method: .automatic)
-        }
     }
 
     deinit {
@@ -187,151 +149,6 @@ class AppDataModel: Identifiable {
     private typealias Tracking = ObjectCaptureSession.Tracking
 
     private var tasks: [ Task<Void, Never> ] = []
-
-    @MainActor
-    func startAutoCapture(method: CaptureStartMethod) {
-        captureStartMethod = method
-        
-        if method == .robotTriggered {
-            // Connect to robot if not already connected
-            if robotState == .disconnected {
-                connectToRobot()
-            }
-        }
-        
-        // Cancel any existing timer
-        autoCaptureTimer?.invalidate()
-        autoCaptureTimer = nil
-        
-        do {
-            try startNewCapture()
-            state = .autoCapturing
-            
-            // Use Task instead of Timer for better actor safety
-            Task { @MainActor [weak self] in
-                try? await Task.sleep(nanoseconds: UInt64(autoCaptureTimeInterval * 1_000_000_000))
-                await MainActor.run {
-                    self?.finishAutoCapture()
-                }
-            }
-        } catch {
-            logger.error("Failed to start auto capture: \(error)")
-            switchToErrorState(error: error)
-        }
-    }
-    
-    @MainActor
-    private func finishAutoCapture() {
-        autoCaptureTimer?.invalidate()
-        autoCaptureTimer = nil
-        
-        objectCaptureSession?.finish()
-        state = .prepareToReconstruct
-        
-        // Automatically start reconstruction
-        do {
-            try startReconstruction()
-        } catch {
-            logger.error("Failed to start reconstruction: \(error)")
-            switchToErrorState(error: error)
-        }
-    }
-
-    // Add method to handle robot signals
-    @MainActor
-    func handleRobotSignal() {
-        if state != .autoCapturing {
-            startAutoCapture(method: .robotTriggered)
-        }
-    }
-
-    // Add method to connect to robot
-    @MainActor
-    func connectToRobot() {
-        guard robotState == .disconnected,
-              let url = URL(string: "ws://\(robotIP):\(robotPort)") else { return }
-        
-        let session = URLSession(configuration: .default)
-        robotConnection = session.webSocketTask(with: url)
-        robotConnection?.resume()
-        
-        robotState = .connected
-        receiveRobotMessages()
-    }
-    
-    // Add method to receive robot messages
-    private func receiveRobotMessages() {
-        robotConnection?.receive { [weak self] result in
-            switch result {
-            case .success(let message):
-                switch message {
-                case .string(let text):
-                    // Parse JSON messages from robot
-                    if let data = text.data(using: .utf8),
-                       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                        Task { @MainActor in
-                            await self?.handleRobotMessage(json)
-                        }
-                    }
-                default:
-                    break
-                }
-                // Continue receiving messages
-                self?.receiveRobotMessages()
-            case .failure(let error):
-                print("Robot connection error: \(error)")
-            }
-        }
-    }
-    
-    // Handle robot messages
-    private func handleRobotMessage(_ message: [String: Any]) async {
-        if let command = message["command"] as? String {
-            switch command {
-            case "start_capture":
-                startAutoCapture(method: .robotTriggered)
-            case "orbit_complete":
-                if let orbitIndex = message["orbit"] as? Int,
-                   let nextOrbit = Orbit(rawValue: orbitIndex + 1) {
-                    orbit = nextOrbit
-                }
-            case "capture_complete":
-                finishAutoCapture()
-            default:
-                break
-            }
-        }
-    }
-
-    func toggleAutoMode() {
-        if state == .autoCapturing {
-            // Stop auto capture
-            objectCaptureSession?.finish()
-            state = .ready
-            captureStartMethod = .manual
-            robotState = .disconnected
-            robotConnection?.cancel()
-            robotConnection = nil
-        } else {
-            // Start auto capture
-            startAutoCapture(method: .automatic)
-        }
-    }
-
-    // Update the helper method for sending messages to robot
-    @MainActor
-    func sendRobotMessage(_ message: String) async {
-        guard robotState != .disconnected else { return }
-        
-        robotConnection?.send(.string(message)) { [weak self] error in
-            if let error = error {
-                print("Error sending to robot: \(error)")
-                Task { @MainActor in
-                    self?.robotState = .disconnected
-                }
-            }
-        }
-    }
 }
 
 extension AppDataModel {
@@ -438,8 +255,6 @@ extension AppDataModel {
 
     private func reset() {
         logger.info("reset() called...")
-        let previousStartMethod = captureStartMethod
-        
         photogrammetrySession = nil
         objectCaptureSession = nil
         captureFolderManager = nil
@@ -452,11 +267,6 @@ extension AppDataModel {
         state = .ready
         isSaveDraftEnabled = false
         tutorialPlayedOnce = false
-        
-        if previousStartMethod != .manual {
-            // Restart auto capture cycle
-            startAutoCapture(method: previousStartMethod)
-        }
     }
 
     private func onStateChanged(newState: ObjectCaptureSession.CaptureState) {
@@ -509,18 +319,11 @@ extension AppDataModel {
 
         switch toState {
             case .ready:
-                if captureStartMethod != .manual {
-                    startAutoCapture(method: captureStartMethod)
-                } else {
-                    do {
-                        try startNewCapture()
-                    } catch {
-                        logger.error("Starting new capture failed!")
-                    }
+                do {
+                    try startNewCapture()
+                } catch {
+                    logger.error("Starting new capture failed!")
                 }
-            case .autoCapturing:
-                // Handle auto capturing state
-                break
             case .prepareToReconstruct:
                 // Clean up the session to free GPU and memory resources.
                 objectCaptureSession = nil

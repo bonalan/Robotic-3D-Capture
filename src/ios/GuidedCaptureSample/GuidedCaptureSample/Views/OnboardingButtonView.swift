@@ -1,5 +1,5 @@
 /*
-See the LICENSE.txt file for this sample’s licensing information.
+See the LICENSE.txt file for this sample's licensing information.
 
 Abstract:
 The buttons on the review screen.
@@ -21,6 +21,11 @@ struct OnboardingButtonView: View {
 
     @State private var userHasIndicatedObjectCannotBeFlipped: Bool? = nil
     @State private var userHasIndicatedFlipObjectAnyway: Bool? = nil
+    @State private var firstOrbitTimer: Timer? = nil
+    @State private var secondOrbitTimer: Timer? = nil
+    @State private var thirdOrbitTimer: Timer? = nil
+    @State private var cantFlipTimer: Timer? = nil
+    @State private var continueTimer: Timer? = nil
 
     var body: some View {
         VStack {
@@ -96,6 +101,12 @@ struct OnboardingButtonView: View {
             }
             .padding(.bottom)
         }
+        .onAppear {
+            startAutoOnboardingTimers()
+        }
+        .onDisappear {
+            stopAutoOnboardingTimers()
+        }
     }
 
     private var isTutorialPlaying: Bool {
@@ -145,6 +156,85 @@ struct OnboardingButtonView: View {
         } catch {
             logger.log("Could not move to new state in User Guide state machine")
         }
+    }
+
+    private func startAutoOnboardingTimers() {
+        // Cancel any existing timers first
+        stopAutoOnboardingTimers()
+        
+        switch onboardingStateMachine.currentState {
+        case .firstSegmentComplete:
+            // After first orbit: Continue -> Can't Flip -> Continue
+            firstOrbitTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { _ in
+                Task { @MainActor in
+                    logger.log("Auto tapping Continue after first orbit...")
+                    transition(with: .continue(isFlippable: appModel.isObjectFlippable))
+                }
+            }
+            
+            cantFlipTimer = Timer.scheduledTimer(withTimeInterval: 8.0, repeats: false) { _ in
+                Task { @MainActor in
+                    logger.log("Auto tapping Can't Flip Object...")
+                    transition(with: .objectCannotBeFlipped)
+                }
+            }
+            
+            continueTimer = Timer.scheduledTimer(withTimeInterval: 11.0, repeats: false) { _ in
+                Task { @MainActor in
+                    logger.log("Auto tapping Continue after Can't Flip...")
+                    transition(with: .continue(isFlippable: false))
+                }
+            }
+            
+        case .secondSegmentComplete:
+            // After second orbit: similar sequence
+            secondOrbitTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { _ in
+                Task { @MainActor in
+                    logger.log("Auto tapping Continue after second orbit...")
+                    transition(with: .continue(isFlippable: false))
+                }
+            }
+            
+            cantFlipTimer = Timer.scheduledTimer(withTimeInterval: 8.0, repeats: false) { _ in
+                Task { @MainActor in
+                    logger.log("Auto tapping Can't Flip Object for second orbit...")
+                    transition(with: .objectCannotBeFlipped)
+                }
+            }
+            
+            continueTimer = Timer.scheduledTimer(withTimeInterval: 11.0, repeats: false) { _ in
+                Task { @MainActor in
+                    logger.log("Auto tapping Continue after second Can't Flip...")
+                    transition(with: .continue(isFlippable: false))
+                }
+            }
+            
+        case .thirdSegmentComplete:
+            // After third orbit: finish
+            thirdOrbitTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { _ in
+                Task { @MainActor in
+                    logger.log("Auto finishing capture after third orbit...")
+                    session.finish()
+                }
+            }
+            
+        default:
+            break
+        }
+    }
+
+    private func stopAutoOnboardingTimers() {
+        firstOrbitTimer?.invalidate()
+        secondOrbitTimer?.invalidate()
+        thirdOrbitTimer?.invalidate()
+        cantFlipTimer?.invalidate()
+        continueTimer?.invalidate()
+        
+        firstOrbitTimer = nil
+        secondOrbitTimer = nil
+        thirdOrbitTimer = nil
+        cantFlipTimer = nil
+        continueTimer = nil
     }
 }
 

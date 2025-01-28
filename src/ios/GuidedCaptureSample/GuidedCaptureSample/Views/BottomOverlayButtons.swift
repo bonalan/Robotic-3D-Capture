@@ -73,6 +73,8 @@ private struct CaptureButton: View {
     var session: ObjectCaptureSession
     @Binding var hasDetectionFailed: Bool
     @Binding var showTutorialView: Bool
+    @State private var firstTimer: Timer? = nil
+    @State private var secondTimer: Timer? = nil
 
     var body: some View {
         Button(
@@ -89,6 +91,12 @@ private struct CaptureButton: View {
                     .background(.blue)
                     .clipShape(Capsule())
             })
+            .onAppear {
+                startAutoCaptureTimers()
+            }
+            .onDisappear {
+                stopAutoCaptureTimers()
+            }
     }
 
     private var buttonLabel: String {
@@ -119,6 +127,29 @@ private struct CaptureButton: View {
         } else if case .detecting = session.state {
             session.startCapturing()
         }
+    }
+    
+    private func startAutoCaptureTimers() {
+        // First action (clicking button 'Continue') after 5 seconds from start
+        firstTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { _ in
+            Task { @MainActor in
+                performAction()
+            }
+        }
+        
+        // Second action (clicking button 'Start capturing') after 12 seconds from start
+        secondTimer = Timer.scheduledTimer(withTimeInterval: 12.0, repeats: false) { _ in
+            Task { @MainActor in
+                performAction()
+            }
+        }
+    }
+
+    private func stopAutoCaptureTimers() {
+        firstTimer?.invalidate()
+        firstTimer = nil
+        secondTimer?.invalidate()
+        secondTimer = nil
     }
 
     struct LocalizedString {
