@@ -13,7 +13,7 @@ A framework for fully automated 3D scanning using the UR10 robot and iOS devices
 
 ---
 
-## 🛠️ Technologies Used
+## 🛠️ Requirements
 
 - **Robotic Arm**: Universal Robots UR10
 - **Platform**: iOS Object Capture
@@ -26,8 +26,7 @@ A framework for fully automated 3D scanning using the UR10 robot and iOS devices
 ```plaintext
 ├── src/                    # Source code
 │   ├── ios/                # iOS Object Capture integration
-│   ├── robot_control/      # Scripts for UR10 motion planning
-│   ├── reconstruction/     # Post-processing for 3D models
+│   ├── robot_control/      # Scripts for UR10 motion planning    
 ├── docs/                   # Documentation and usage guides
 ├── examples/               # Example workflows and configurations
 └── README.md               # Project overview
