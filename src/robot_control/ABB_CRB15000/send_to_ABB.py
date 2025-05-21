@@ -1,12 +1,6 @@
 import compas_rrc as rrc
-from compas.geometry import Plane, Point, Vector, Frame
+from compas.geometry import Point, Vector, Frame
 import json, os
-
-def gh_to_compas_plane(gh_plane):
-    origin = gh_plane.Origin
-    normal = gh_plane.ZAxis
-    p = Plane(Point(origin.X, origin.Y, origin.Z), Vector(normal.X, normal.Y, normal.Z))
-    return p
 
 def load_planes(filename):
     with open(filename, 'r') as f:
@@ -16,8 +10,9 @@ def load_planes(filename):
     for i in range(len(data)):
         plane_data = data[str(i)]
         origin = plane_data["Point"]
-        normal = plane_data["Vector"]
-        p = Plane(Point(origin[0], origin[1], origin[2]), Vector(normal[0], normal[1], normal[2]))
+        xvec = plane_data["X"]
+        yvec = plane_data["Y"]
+        p = Frame(Point(origin[0], origin[1], origin[2]), Vector(xvec[0], xvec[1], xvec[2]), Vector(yvec[0], yvec[1], yvec[2]))
         planes.append(p)
 
     return planes
@@ -37,14 +32,14 @@ if __name__ == '__main__':
     print('Connected.')
 
     # Define robot joints
-    robot_joints_start_position = [175.0, 0.5, 53.0, 10.0, 2.0, 10.0] # TODO!!!
+    robot_joints_start_position = [175.0, 0.5, 53.0, 100.0, 2.0, 10.0] 
     # robot_joints_end_position = [172.0, -40.0, 58.0, -5.0, 85.0, 66.0] # TODO!!!
 
     # Define external axis
     external_axis_dummy = []
 
     # Define speed 
-    speed = 800
+    speed = 400 #800
     speed_scan = 150 
 
     # Set Acceleration
@@ -67,9 +62,8 @@ if __name__ == '__main__':
     # # abb.send(rrc.PrintText('Press Play to move.'))
     # # abb.send(rrc.Stop())
 
-    for plane in planes: 
-        frame = Frame.from_plane(plane)
-        abb.send(rrc.MoveToFrame(frame, speed, rrc.Zone.FINE))
+    for frame in planes: 
+        abb.send(rrc.MoveToFrame(frame, speed, rrc.Zone.Z10))
 
     # # Move robot to end position
     # done = abb.send_and_wait(rrc.MoveToJoints(robot_joints_end_position, external_axis_dummy, speed, rrc.Zone.FINE))
@@ -80,3 +74,5 @@ if __name__ == '__main__':
     # Close client
     ros.close()
     ros.terminate()
+
+    print("Process completed")
