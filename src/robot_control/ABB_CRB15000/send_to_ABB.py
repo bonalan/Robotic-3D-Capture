@@ -21,7 +21,8 @@ def load_planes(filename):
 if __name__ == '__main__':
     current_dir = os.path.dirname(os.path.abspath(__file__))
     planes = load_planes(filename=os.path.join(current_dir, "planes.json"))
-    print("Loaded planes")
+    trajectory_n = float(len(planes))/3.0
+    print(f"Loaded planes. Number of planes per trajectory: {trajectory_n}")
 
     # Create Ros Client
     ros = rrc.RosClient()
@@ -33,14 +34,16 @@ if __name__ == '__main__':
 
     # Define robot joints
     robot_joints_start_position = [175.0, 0.5, 53.0, 100.0, 2.0, 10.0] 
+    robot_joints_get_bounding_box = [166.95, 26.72, 58.72, 98.39, 34.10, 23.14]
     # robot_joints_end_position = [172.0, -40.0, 58.0, -5.0, 85.0, 66.0] # TODO!!!
 
     # Define external axis
     external_axis_dummy = []
 
     # Define speed 
+
     speed = 400 #800
-    speed_scan = 150 
+    speed_scan = 50 
 
     # Set Acceleration
     acc = 100  # Unit [%]
@@ -56,14 +59,23 @@ if __name__ == '__main__':
     print('Acc and MaxSpeed sent to robot')
 
     # Move robot to start position
-    done = abb.send_and_wait(rrc.MoveToJoints(robot_joints_start_position, external_axis_dummy, speed, rrc.Zone.FINE))
+    done = abb.send_and_wait(rrc.MoveToJoints(robot_joints_get_bounding_box, external_axis_dummy, speed, rrc.Zone.FINE))
 
     # # # Stop task user must press play button on the FlexPendant (RobotStudio) before robot starts to move
-    # # abb.send(rrc.PrintText('Press Play to move.'))
-    # # abb.send(rrc.Stop())
+    # abb.send(rrc.PrintText('Press Play to move.'))
+    # abb.send(rrc.Stop())
 
-    for frame in planes: 
-        abb.send(rrc.MoveToFrame(frame, speed, rrc.Zone.Z10))
+    abb.send(rrc.WaitTime(5.0))  # 5s pause (simulating "Continue")  
+    abb.send(rrc.WaitTime(12.0))  # 12s pause (simulating "Start capture")
+
+    for i, frame in enumerate(planes): 
+        # if i < trajectory_n+1:
+        abb.send(rrc.MoveToFrame(frame, speed_scan, rrc.Zone.Z10))
+
+        # if i%trajectory_n == 0 and i < len(planes): # Between orbits: extra waits for "Continue / Can't Flip / Continue"
+        #     abb.send(rrc.WaitTime(5.0))
+        #     abb.send(rrc.WaitTime(8.0))
+        #     abb.send(rrc.WaitTime(5.0))
 
     # # Move robot to end position
     # done = abb.send_and_wait(rrc.MoveToJoints(robot_joints_end_position, external_axis_dummy, speed, rrc.Zone.FINE))
