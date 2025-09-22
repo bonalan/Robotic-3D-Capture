@@ -2,6 +2,8 @@
 
 A framework for fully automated 3D scanning using the UR10 robot and iOS devices. This project integrates robotic control and iOS Object Capture to achieve end-to-end 3D model reconstruction. 
 
+https://github.com/user-attachments/assets/24734142-02e5-46bc-97d4-2d29f4d2ea10
+
 ---
 
 ## 🚀 Features
@@ -30,3 +32,5 @@ A framework for fully automated 3D scanning using the UR10 robot and iOS devices
 ├── docs/                   # Documentation and usage guides
 ├── examples/               # Example workflows and configurations
 └── README.md               # Project overview
+
+
